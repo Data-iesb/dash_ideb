@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dash-ideb
+  namespace: dashs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dash-ideb
+  template:
+    metadata:
+      labels:
+        app: dash-ideb
+    spec:
+      serviceAccountName: dataiesb-dashs
+      containers:
+        - name: dash-ideb
+          image: 248189947068.dkr.ecr.us-east-1.amazonaws.com/dash-ideb:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8050
+          env:
+            # Dash é servido sob o prefixo /ideb/ (bate com o Ingress e as probes).
+            - name: DASH_PREFIX
+              value: /ideb/
+            # Trino in-cluster (plain HTTP :8080), mesmo padrão do dash-educacao-superior.
+            # O app só usa auth quando TRINO_PORT==443; em 8080 conecta sem senha.
+            - name: TRINO_HOST
+              value: trino.trino.svc.cluster.local
+            - name: TRINO_PORT
+              value: "8080"
+            - name: TRINO_USER
+              value: funasa_reader
+            - name: TRINO_IDEB_TABLE
+              value: seaweedfs.raw.inep_ideb_municipios
+          readinessProbe:
+            httpGet:
+              path: /ideb/
+              port: 8050
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /ideb/
+              port: 8050
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dash-ideb
+  namespace: dashs
+spec:
+  selector:
+    app: dash-ideb
+  ports:
+    - port: 8050
+      targetPort: 8050
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dash-ideb-ingress
+  namespace: dashs
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: app.dataiesb.com
+      http:
+        paths:
+          - path: /ideb
+            pathType: Prefix
+            backend:
+              service:
+                name: dash-ideb
+                port:
+                  number: 8050
