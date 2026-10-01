@@ -233,19 +233,32 @@ def linha_municipio(df_mun_periodo):
 
 
 # ── Tabela de Ranking ────────────────────────────────────────────────────────
-def gerar_tabela_ranking(df_referencia):
+def calcular_ranking_municipios(df_referencia):
 	base = df_referencia.dropna(subset=["ideb_observado"]).copy()
 	if base.empty:
-		return html.P("Sem dados suficientes para gerar a tabela.", style={"color": COR_TEXTO_FRACO, "padding": 10})
+		return pd.DataFrame()
 
-	resumo = base.groupby(["nome_municipio", "sg_uf"], as_index=False).agg({
+	resumo = base.groupby("cod_municipio", as_index=False).agg({
+		"nome_municipio": "first",
+		"sg_uf": "first",
 		"ideb_observado": "mean",
 		"nota_saeb_matematica": "mean",
 		"nota_saeb_portugues": "mean",
 		"tx_aprovacao_1_a_5": "mean"
-	}).sort_values("ideb_observado", ascending=False).reset_index(drop=True)
-
+	}).sort_values(
+		["ideb_observado", "nome_municipio", "sg_uf", "cod_municipio"],
+		ascending=[False, True, True, True],
+		kind="mergesort",
+	).reset_index(drop=True)
 	resumo["#"] = resumo.index + 1
+	return resumo
+
+
+def gerar_tabela_ranking(df_referencia):
+	resumo = calcular_ranking_municipios(df_referencia)
+	if resumo.empty:
+		return html.P("Sem dados suficientes para gerar a tabela.", style={"color": COR_TEXTO_FRACO, "padding": 10})
+
 	resumo["ideb_observado"] = resumo["ideb_observado"].round(2)
 	resumo["nota_saeb_matematica"] = resumo["nota_saeb_matematica"].round(2)
 	resumo["nota_saeb_portugues"] = resumo["nota_saeb_portugues"].round(2)
@@ -370,10 +383,9 @@ def construir_visao_municipio(df_periodo, df_referencia, cod_municipio, ano_efet
 				ano_disponivel = ano_efetivo
 			linha_recente = df_mun_ref.mean(numeric_only=True)
 
-			ranking_ref = df_referencia.dropna(subset=["ideb_observado"]).groupby("nome_municipio", as_index=False)["ideb_observado"].mean()
-			ranking_ref = ranking_ref.sort_values("ideb_observado", ascending=False).reset_index(drop=True)
-			posicao = ranking_ref.index[ranking_ref["nome_municipio"] == nome]
-			texto_posicao = f"{posicao[0] + 1}º de {len(ranking_ref)}" if len(posicao) else "-"
+			ranking_ref = calcular_ranking_municipios(df_referencia)
+			posicao = ranking_ref.loc[ranking_ref["cod_municipio"] == cod_municipio, "#"]
+			texto_posicao = f"{int(posicao.iloc[0])}º de {len(ranking_ref)}" if not posicao.empty else "-"
 
 			detalhes = html.Div([
 				html.P(f"{nome} — {uf}", style={"fontSize": 20, "fontWeight": 700, "color": COR_TEXTO, "margin": "0 0 2px 0"}),
