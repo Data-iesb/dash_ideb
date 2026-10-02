@@ -2,7 +2,7 @@ import os
 import urllib3
 
 import dash
-from dash import Input, Output, State, dcc, html, dash_table
+from dash import Input, Output, State, ctx, dcc, html, dash_table
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -612,12 +612,32 @@ def alternar_seletor_municipio(aba):
 	Output("filtro-uf", "value"),
 	Output("filtro-etapa", "value"),
 	Output("filtro-rede", "value"),
-	Output("filtro-municipio", "value"),
 	Input("botao-limpar", "n_clicks"),
 	prevent_initial_call=True,
 )
 def limpar_filtros(n_clicks):
-	return [ANO_MIN, ANO_MAX], ANO_REF_PADRAO, [], [], [], None
+	return [ANO_MIN, ANO_MAX], ANO_REF_PADRAO, [], [], []
+
+
+@app.callback(
+	Output("filtro-municipio", "options"),
+	Output("filtro-municipio", "value"),
+	Input("filtro-uf", "value"),
+	Input("botao-limpar", "n_clicks"),
+	State("filtro-municipio", "value"),
+)
+def atualizar_opcoes_municipio(ufs, n_clicks, cod_municipio):
+	municipios = MUNICIPIOS if not ufs else MUNICIPIOS[MUNICIPIOS["sg_uf"].isin(ufs)]
+	opcoes = [
+		{"label": row.rotulo, "value": row.cod_municipio}
+		for row in municipios.itertuples()
+	]
+	codigos_disponiveis = municipios["cod_municipio"].tolist()
+
+	if "botao-limpar.n_clicks" in ctx.triggered_prop_ids or cod_municipio not in codigos_disponiveis:
+		cod_municipio = None
+
+	return opcoes, cod_municipio
 
 
 @app.callback(
